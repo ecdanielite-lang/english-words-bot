@@ -3,9 +3,9 @@ import logging
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 import os
-import random
 import asyncio
 import threading
+import datetime
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
@@ -20,248 +20,152 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("No BOT_TOKEN set!")
 
-# ============ QUIZ QUESTIONS ============
-QUESTIONS = [
-    {
-        "question": "What is the capital of France?",
-        "options": ["London", "Berlin", "Paris", "Rome"],
-        "answer": "Paris",
-        "category": "Geography"
+# ============ NEWS CATEGORIES ============
+NEWS = {
+    "local": {
+        "label": "🇰🇭 ព័ត៌មានក្នុងស្រុក",
+        "desc": "Local Cambodia News",
+        "items": [
+            "រដ្ឋាភិបាលកម្ពុជាប្រកាសផែនការអភិវឌ្ឍន៍សេដ្ឋកិច្ចថ្មី។",
+            "ក្រុងភ្នំពេញបន្តពង្រីកហេដ្ឋារចនាសម្ព័ន្ធដឹកជញ្ជូន។",
+            "ក្រសួងអប់រំប្រកាសកម្មវិធីសិក្សាថ្មីសម្រាប់ឆ្នាំ២០២៥។",
+            "កម្ពុជាទទួលបានវិនិយោគបរទេសសរុបជាង១ពាន់លានដុល្លារ។",
+            "ស្ថានភាពអាកាសធាតុកម្ពុជានឹងប្រែប្រួលក្នុងរដូវវស្សា។",
+        ]
     },
-    {
-        "question": "How many continents are there on Earth?",
-        "options": ["5", "6", "7", "8"],
-        "answer": "7",
-        "category": "Geography"
+    "world": {
+        "label": "🌍 ព័ត៌មានអន្តរជាតិ",
+        "desc": "World News",
+        "items": [
+            "អង្គការសហប្រជាជាតិប្រជុំពិភាក្សាអំពីការផ្លាស់ប្តូរអាកាសធាតុ។",
+            "ប្រទេសអាស៊ីអាគ្នេយ៍បង្កើនកិច្ចសហប្រតិបត្តិការពាណិជ្ជកម្ម។",
+            "ទីផ្សារភាគហ៊ុនពិភពលោកមានការប្រែប្រួលខ្លាំង។",
+            "ការប្រជុំកំពូល G20 នឹងប្រព្រឹត្តទៅនៅចុងឆ្នាំ។",
+            "បច្ចេកវិទ្យា AI កំពុងផ្លាស់ប្តូរទីផ្សារការងារទូទាំងពិភពលោក។",
+        ]
     },
-    {
-        "question": "Which planet is closest to the Sun?",
-        "options": ["Venus", "Mercury", "Earth", "Mars"],
-        "answer": "Mercury",
-        "category": "Science"
+    "economy": {
+        "label": "💰 ព័ត៌មានសេដ្ឋកិច្ច",
+        "desc": "Economy News",
+        "items": [
+            "ប្រាក់រៀលកម្ពុជាមានស្ថិរភាពល្អប្រឆាំងនឹងដុល្លារអាមេរិក។",
+            "វិស័យទេសចរណ៍កម្ពុជាបន្តងើបឡើងក្រោយជំងឺកូវីដ។",
+            "ការនាំចេញទំនិញកម្ពុជាកើនឡើង១៥ភាគរយក្នុងឆ្នាំនេះ។",
+            "ធនាគារជាតិកម្ពុជាប្រកាសគោលនយោបាយការប្រាក់ថ្មី។",
+            "ការវិនិយោគលើហេដ្ឋារចនាសម្ព័ន្ធឌីជីថលកើនឡើងខ្លាំង។",
+        ]
     },
-    {
-        "question": "What is the largest ocean on Earth?",
-        "options": ["Atlantic", "Indian", "Arctic", "Pacific"],
-        "answer": "Pacific",
-        "category": "Geography"
+    "sport": {
+        "label": "⚽ ព័ត៌មានកីឡា",
+        "desc": "Sports News",
+        "items": [
+            "ក្រុមបាល់ទាត់ជាតិកម្ពុជាជោគជ័យក្នុងការប្រកួតអន្តរជាតិ។",
+            "ក្រុមហ៊ុន SEA Games ២០២៥ នឹងប្រព្រឹត្តទៅនៅប្រទេសថៃ។",
+            "តារាកីឡាករខ្មែរជោគជ័យក្នុងការប្រកួតអាស៊ី។",
+            "ព្រឹត្តិការណ៍ Marathon ភ្នំពេញទាក់ទាញអ្នកចូលរួមជាងពីរពាន់នាក់។",
+            "កម្ពុជាបន្តអភិវឌ្ឍវិស័យកីឡាជាតិ។",
+        ]
     },
-    {
-        "question": "Who invented the telephone?",
-        "options": ["Thomas Edison", "Alexander Graham Bell", "Nikola Tesla", "Albert Einstein"],
-        "answer": "Alexander Graham Bell",
-        "category": "History"
-    },
-    {
-        "question": "What is the fastest land animal?",
-        "options": ["Lion", "Horse", "Cheetah", "Leopard"],
-        "answer": "Cheetah",
-        "category": "Nature"
-    },
-    {
-        "question": "How many sides does a hexagon have?",
-        "options": ["5", "6", "7", "8"],
-        "answer": "6",
-        "category": "Math"
-    },
-    {
-        "question": "What is the largest country in the world by area?",
-        "options": ["China", "USA", "Canada", "Russia"],
-        "answer": "Russia",
-        "category": "Geography"
-    },
-    {
-        "question": "Which gas do plants absorb from the atmosphere?",
-        "options": ["Oxygen", "Nitrogen", "Carbon Dioxide", "Hydrogen"],
-        "answer": "Carbon Dioxide",
-        "category": "Science"
-    },
-    {
-        "question": "What year did World War II end?",
-        "options": ["1943", "1944", "1945", "1946"],
-        "answer": "1945",
-        "category": "History"
-    },
-    {
-        "question": "Which is the longest river in the world?",
-        "options": ["Amazon", "Nile", "Yangtze", "Mississippi"],
-        "answer": "Nile",
-        "category": "Geography"
-    },
-    {
-        "question": "What is the chemical symbol for Gold?",
-        "options": ["Go", "Gd", "Au", "Ag"],
-        "answer": "Au",
-        "category": "Science"
-    },
-    {
-        "question": "How many bones are in the adult human body?",
-        "options": ["196", "206", "216", "226"],
-        "answer": "206",
-        "category": "Science"
-    },
-    {
-        "question": "Which country is the largest producer of coffee?",
-        "options": ["Colombia", "Ethiopia", "Vietnam", "Brazil"],
-        "answer": "Brazil",
-        "category": "General"
-    },
-    {
-        "question": "What is the square root of 144?",
-        "options": ["10", "11", "12", "13"],
-        "answer": "12",
-        "category": "Math"
-    },
-    {
-        "question": "Which planet has the most moons?",
-        "options": ["Jupiter", "Saturn", "Uranus", "Neptune"],
-        "answer": "Saturn",
-        "category": "Science"
-    },
-    {
-        "question": "What language is spoken in Brazil?",
-        "options": ["Spanish", "Portuguese", "English", "French"],
-        "answer": "Portuguese",
-        "category": "Geography"
-    },
-    {
-        "question": "Who painted the Mona Lisa?",
-        "options": ["Michelangelo", "Raphael", "Leonardo da Vinci", "Picasso"],
-        "answer": "Leonardo da Vinci",
-        "category": "History"
-    },
-    {
-        "question": "What is the smallest country in the world?",
-        "options": ["Monaco", "San Marino", "Vatican City", "Liechtenstein"],
-        "answer": "Vatican City",
-        "category": "Geography"
-    },
-    {
-        "question": "How many hours are in a week?",
-        "options": ["148", "158", "168", "178"],
-        "answer": "168",
-        "category": "Math"
-    },
-]
+    "tech": {
+        "label": "💻 ព័ត៌មានបច្ចេកវិទ្យា",
+        "desc": "Technology News",
+        "items": [
+            "កម្ពុជាពង្រីកប្រើប្រាស់ទូរស័ព្ទ ៥G ទូទាំងប្រទេស។",
+            "ក្រុមហ៊ុន Tech ថ្មីៗក្នុងកម្ពុជាទទួលបានការវិនិយោគ។",
+            "AI កំពុងត្រូវបានប្រើប្រាស់ក្នុងវិស័យធនាគារខ្មែរ។",
+            "ការអប់រំអនឡាញកើនឡើងខ្លាំងក្នុងកម្ពុជា។",
+            "កម្ពុជានឹងចាប់ផ្តើមប្រើប្រាស់ប្រព័ន្ធបង់ប្រាក់ឌីជីថលថ្មី។",
+        ]
+    }
+}
 
-# Store user scores
-user_scores = {}
-user_current_question = {}
-
-# ============ FLASK - KEEPS HOST ALIVE ============
+# ============ FLASK ============
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
 def health_check():
-    return "Daily Trivia Bot is running!", 200
+    return "Khmer News Bot is running!", 200
 
 # ============ HELPERS ============
-def get_question(index):
-    return QUESTIONS[index % len(QUESTIONS)]
-
-def build_question_keyboard(q_index, options):
-    keyboard = []
-    for option in options:
-        keyboard.append([InlineKeyboardButton(
-            option,
-            callback_data=f"ans_{q_index}_{option}"
-        )])
+def get_main_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("🇰🇭 ក្នុងស្រុក", callback_data="local"),
+         InlineKeyboardButton("🌍 អន្តរជាតិ", callback_data="world")],
+        [InlineKeyboardButton("💰 សេដ្ឋកិច្ច", callback_data="economy"),
+         InlineKeyboardButton("⚽ កីឡា", callback_data="sport")],
+        [InlineKeyboardButton("💻 បច្ចេកវិទ្យា", callback_data="tech")],
+    ]
     return InlineKeyboardMarkup(keyboard)
+
+def get_news_text(category):
+    import random
+    cat = NEWS[category]
+    news_item = random.choice(cat["items"])
+    today = datetime.date.today().strftime("%d/%m/%Y")
+    text = (
+        f"{cat['label']}\n"
+        f"📅 {today}\n\n"
+        f"📰 {news_item}\n\n"
+        "ជ្រើសរើសប្រភេទព័ត៌មានទៀត 👇"
+    )
+    return text
 
 # ============ COMMANDS ============
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name or "friend"
-    user_id = update.effective_user.id
-    if user_id not in user_scores:
-        user_scores[user_id] = {"correct": 0, "total": 0}
-
+    user_name = update.effective_user.first_name or "មិត្ត"
+    today = datetime.date.today().strftime("%d/%m/%Y")
     welcome = (
-        f"👋 Hello {user_name}!\n\n"
-        "Welcome to <b>Daily Trivia Quiz</b> 🧠\n\n"
-        "Test your knowledge with fun trivia questions!\n\n"
-        "<b>Commands:</b>\n"
-        "/quiz - Start a new question\n"
-        "/score - Check your score\n"
-        "/help - Show help\n\n"
-        "Ready to test your knowledge? Let's go! 🚀"
+        f"👋 សួស្តី {user_name}!\n\n"
+        f"ស្វាគមន៍មកកាន់ <b>ព័ត៌មានប្រចាំថ្ងៃ</b> 📰\n\n"
+        f"📅 ថ្ងៃទី {today}\n\n"
+        "ទទួលបានព័ត៌មានថ្មីៗប្រចាំថ្ងៃ!\n\n"
+        "<b>ជ្រើសរើសប្រភេទព័ត៌មាន:</b>"
     )
-    await update.message.reply_text(welcome, parse_mode="HTML")
-
-async def quiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in user_scores:
-        user_scores[user_id] = {"correct": 0, "total": 0}
-
-    q_index = random.randint(0, len(QUESTIONS) - 1)
-    user_current_question[user_id] = q_index
-    q = QUESTIONS[q_index]
-
-    options = q["options"].copy()
-    random.shuffle(options)
-
-    text = (
-        f"🧠 <b>Trivia Question</b>\n"
-        f"📂 Category: {q['category']}\n\n"
-        f"❓ {q['question']}\n\n"
-        "Choose your answer 👇"
-    )
-
     await update.message.reply_text(
-        text,
+        welcome,
         parse_mode="HTML",
-        reply_markup=build_question_keyboard(q_index, options)
+        reply_markup=get_main_keyboard()
     )
 
-async def score_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id not in user_scores:
-        user_scores[user_id] = {"correct": 0, "total": 0}
-
-    score = user_scores[user_id]
-    correct = score["correct"]
-    total = score["total"]
-    percentage = int((correct / total) * 100) if total > 0 else 0
-
-    if percentage >= 80:
-        grade = "🏆 Excellent!"
-    elif percentage >= 60:
-        grade = "👍 Good!"
-    elif percentage >= 40:
-        grade = "📚 Keep learning!"
-    else:
-        grade = "💪 Keep trying!"
-
-    text = (
-        "📊 <b>Your Score</b>\n\n"
-        f"✅ Correct: {correct}\n"
-        f"❌ Wrong: {total - correct}\n"
-        f"📝 Total: {total}\n"
-        f"📈 Accuracy: {percentage}%\n\n"
-        f"{grade}\n\n"
-        "Use /quiz to answer more questions!"
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📰 <b>ជ្រើសរើសប្រភេទព័ត៌មាន:</b>",
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
     )
-    await update.message.reply_text(text, parse_mode="HTML")
+
+async def local_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        get_news_text("local"),
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
+    )
+
+async def world_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        get_news_text("world"),
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
+    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
-        "🧠 <b>Daily Trivia Quiz Bot</b>\n\n"
-        "Test your knowledge every day!\n\n"
+        "📰 <b>ព័ត៌មានប្រចាំថ្ងៃ Bot</b>\n\n"
+        "ទទួលបានព័ត៌មានថ្មីៗប្រចាំថ្ងៃ!\n\n"
         "<b>Commands:</b>\n"
-        "/start - Welcome message\n"
-        "/quiz - Get a new question\n"
-        "/score - Check your score\n"
-        "/help - Show this help\n\n"
-        "<b>Categories:</b>\n"
-        "🌍 Geography\n"
-        "🔬 Science\n"
-        "📜 History\n"
-        "🌿 Nature\n"
-        "🔢 Math\n"
-        "🌐 General Knowledge\n\n"
-        "Keep playing and improve your score! 🏆"
+        "/start - ទំព័រដើម\n"
+        "/news - ជ្រើសរើសព័ត៌មាន\n"
+        "/local - ព័ត៌មានក្នុងស្រុក\n"
+        "/world - ព័ត៌មានអន្តរជាតិ\n"
+        "/help - ជំនួយ\n\n"
+        "ចុចប៊ូតុងខាងក្រោម 👇"
     )
-    await update.message.reply_text(help_text, parse_mode="HTML")
+    await update.message.reply_text(
+        help_text,
+        parse_mode="HTML",
+        reply_markup=get_main_keyboard()
+    )
 
 # ============ CALLBACK HANDLER ============
 
@@ -269,58 +173,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = update.effective_user.id
-    data = query.data
-
-    if data.startswith("ans_"):
-        parts = data.split("_", 2)
-        q_index = int(parts[1])
-        selected = parts[2]
-
-        q = QUESTIONS[q_index]
-        correct_answer = q["answer"]
-
-        if user_id not in user_scores:
-            user_scores[user_id] = {"correct": 0, "total": 0}
-
-        user_scores[user_id]["total"] += 1
-
-        if selected == correct_answer:
-            user_scores[user_id]["correct"] += 1
-            result = (
-                f"✅ <b>Correct!</b>\n\n"
-                f"The answer is: <b>{correct_answer}</b>\n\n"
-                f"🏆 Score: {user_scores[user_id]['correct']}/{user_scores[user_id]['total']}\n\n"
-                "Use /quiz for the next question!"
-            )
-        else:
-            result = (
-                f"❌ <b>Wrong!</b>\n\n"
-                f"Your answer: {selected}\n"
-                f"Correct answer: <b>{correct_answer}</b>\n\n"
-                f"📊 Score: {user_scores[user_id]['correct']}/{user_scores[user_id]['total']}\n\n"
-                "Use /quiz to try another question!"
-            )
-
-        await query.edit_message_text(result, parse_mode="HTML")
-
-    elif data == "next":
-        q_index = random.randint(0, len(QUESTIONS) - 1)
-        user_current_question[user_id] = q_index
-        q = QUESTIONS[q_index]
-        options = q["options"].copy()
-        random.shuffle(options)
-
-        text = (
-            f"🧠 <b>Trivia Question</b>\n"
-            f"📂 Category: {q['category']}\n\n"
-            f"❓ {q['question']}\n\n"
-            "Choose your answer 👇"
-        )
+    if query.data in NEWS:
+        text = get_news_text(query.data)
         await query.edit_message_text(
             text,
             parse_mode="HTML",
-            reply_markup=build_question_keyboard(q_index, options)
+            reply_markup=get_main_keyboard()
         )
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -330,8 +188,9 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def run_bot_async():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("quiz", quiz_command))
-    app.add_handler(CommandHandler("score", score_command))
+    app.add_handler(CommandHandler("news", news_command))
+    app.add_handler(CommandHandler("local", local_command))
+    app.add_handler(CommandHandler("world", world_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_error_handler(error_handler)
@@ -342,7 +201,7 @@ async def run_bot_async():
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
     )
-    logger.info("Daily Trivia Quiz Bot is polling and ready!")
+    logger.info("Khmer News Bot is polling and ready!")
     while True:
         await asyncio.sleep(1)
 
